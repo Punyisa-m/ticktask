@@ -1,13 +1,14 @@
 from fastapi import FastAPI
 from app.database import engine, Base
 from app.models import user, project, requirement, task
-from app.routers import auth
+from app.routers import auth, project
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
 app.include_router(auth.router)
+app.include_router(project.router)
 
 @app.get("/health")
 def health_check():

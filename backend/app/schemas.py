@@ -22,3 +22,17 @@ class UserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    
+class ProjectCreate(BaseModel):
+    name: str
+    description: str | None = None
+
+class ProjectResponse(BaseModel):
+    id: int
+    name: str
+    description: str | None
+    owner_id: int
+    status: str
+
+    class Config:
+        from_attributes = True
