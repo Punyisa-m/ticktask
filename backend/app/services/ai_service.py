@@ -43,3 +43,47 @@ priority ต้องเป็นหนึ่งใน: low, medium, high
         return tasks
     except json.JSONDecodeError:
         raise ValueError(f"AI ตอบกลับมาไม่ใช่ JSON ที่ถูกต้อง: {content}")
+    
+def recommend_assignee(task_title: str, task_description: str, candidates: list[dict]) -> dict:
+    """
+    candidates: list ของ dict เช่น
+    [{"user_id": 2, "name": "mameaw", "skills": ["React", "Python"], "current_task_count": 3}]
+
+    คืนค่า: {"user_id": 2, "reason": "เหตุผลที่เลือก"}
+    """
+    candidates_text = "\n".join(
+        f"- user_id: {c['user_id']}, ชื่อ: {c['name']}, ทักษะ: {', '.join(c['skills']) or 'ไม่มีข้อมูล'}, งานที่ถืออยู่ตอนนี้: {c['current_task_count']} งาน"
+        for c in candidates
+    )
+
+    prompt = f"""คุณคือ AI Project Manager ต้องเลือกคนที่เหมาะสมที่สุดสำหรับ task นี้
+
+Task: {task_title}
+รายละเอียด: {task_description}
+
+รายชื่อผู้สมัครที่เลือกได้:
+{candidates_text}
+
+พิจารณาจากทักษะที่ตรงกับ task และภาระงานปัจจุบัน (คนที่งานน้อยกว่าควรได้รับความสำคัญถ้าทักษะพอ ๆ กัน)
+
+ตอบกลับเป็น JSON เท่านั้น ห้ามมีข้อความอื่น รูปแบบนี้:
+{{"user_id": <id ที่เลือก>, "reason": "เหตุผลสั้น ๆ ที่เลือกคนนี้"}}
+"""
+
+    response = client.chat.completions.create(
+        model="typhoon-v2.5-30b-a3b-instruct",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.3,
+        max_tokens=512,
+    )
+
+    content = response.choices[0].message.content.strip()
+    if content.startswith("```"):
+        content = content.strip("`")
+        content = content.replace("json", "", 1).strip()
+
+    try:
+        result = json.loads(content)
+        return result
+    except json.JSONDecodeError:
+        raise ValueError(f"AI ตอบกลับมาไม่ใช่ JSON ที่ถูกต้อง: {content}")
