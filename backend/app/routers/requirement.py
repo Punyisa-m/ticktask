@@ -6,6 +6,8 @@ from app.models.project import Project
 from app.models.requirement import Requirement
 from app.security import get_current_user
 from app import schemas
+from app.services.ai_service import analyze_requirement
+from app.models.requirement import Requirement
 
 router = APIRouter(prefix="/projects", tags=["requirements"])
 
@@ -49,3 +51,27 @@ def list_requirements(
         raise HTTPException(status_code=404, detail="ไม่พบ project นี้")
 
     return db.query(Requirement).filter(Requirement.project_id == project_id).all()
+
+@router.post("/{project_id}/requirements/{requirement_id}/analyze")
+def analyze(
+    project_id: int,
+    requirement_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.owner_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="ไม่พบ project นี้")
+
+    requirement = db.query(Requirement).filter(
+        Requirement.id == requirement_id,
+        Requirement.project_id == project_id
+    ).first()
+    if not requirement:
+        raise HTTPException(status_code=404, detail="ไม่พบ requirement นี้")
+
+    tasks = analyze_requirement(requirement.raw_text)
+    return {"suggested_tasks": tasks}
