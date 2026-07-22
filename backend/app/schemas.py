@@ -36,3 +36,12 @@ class ProjectResponse(BaseModel):
 
     class Config:
         from_attributes = True
+        
+class RequirementResponse(BaseModel):
+    id: int
+    project_id: int
+    file_path: str | None
+    raw_text: str | None
+
+    class Config:
+        from_attributes = True
