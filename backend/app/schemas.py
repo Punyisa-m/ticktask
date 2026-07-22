@@ -45,3 +45,27 @@ class RequirementResponse(BaseModel):
 
     class Config:
         from_attributes = True
+        
+
+class TaskItem(BaseModel):
+    title: str
+    description: str | None = None
+    estimated_hours: float | None = None
+    priority: str = "medium"
+
+class TaskConfirmRequest(BaseModel):
+    tasks: list[TaskItem]
+
+class TaskResponse(BaseModel):
+    id: int
+    project_id: int
+    requirement_id: int | None
+    title: str
+    description: str | None
+    assigned_to: int | None
+    status: str
+    estimated_hours: float | None
+    priority: str
+
+    class Config:
+        from_attributes = True
