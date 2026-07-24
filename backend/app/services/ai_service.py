@@ -87,3 +87,33 @@ Task: {task_title}
         return result
     except json.JSONDecodeError:
         raise ValueError(f"AI ตอบกลับมาไม่ใช่ JSON ที่ถูกต้อง: {content}")
+    
+    
+def classify_intent(text: str) -> str:
+    """
+    แยกประเภทข้อความว่าเป็น 'question' (คำถามจริงจัง) หรือ 'greeting' (ทักทาย/ขอบคุณ/พูดคุยทั่วไป)
+    คืนค่า: "question" หรือ "greeting"
+    """
+    prompt = f"""แยกประเภทข้อความต่อไปนี้ว่าเป็นประเภทไหน
+
+ข้อความ: "{text}"
+
+ประเภทที่เป็นไปได้:
+- "question" คือคำถามที่ต้องการข้อมูล/คำตอบจริงจัง เช่น ถามเกี่ยวกับ requirement, task, ระบบ
+- "greeting" คือคำทักทาย คำขอบคุณ คำลา หรือคำพูดทั่วไปที่ไม่ต้องการข้อมูลเฉพาะเจาะจง เช่น "สวัสดี", "ขอบคุณครับ", "โอเค"
+
+ตอบกลับเป็นคำเดียวเท่านั้น: question หรือ greeting ห้ามมีคำอธิบายเพิ่ม"""
+
+    response = client.chat.completions.create(
+        model="typhoon-v2.5-30b-a3b-instruct",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+        max_tokens=10,
+    )
+
+    result = response.choices[0].message.content.strip().lower()
+
+    # กันกรณี AI ตอบมาไม่ตรงเป๊ะ (เช่นมีจุด หรือคำอื่นปน)
+    if "greeting" in result:
+        return "greeting"
+    return "question"

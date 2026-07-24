@@ -9,7 +9,7 @@ from app.models.task import Task
 from app.models.chunk import RequirementChunk
 from app.security import get_current_user
 from app import schemas
-from app.services.ai_service import analyze_requirement, client
+from app.services.ai_service import analyze_requirement, client, classify_intent
 from app.services.rag_service import chunk_text, embed_text
 
 router = APIRouter(prefix="/projects", tags=["requirements"])
@@ -157,6 +157,23 @@ def chat_with_project(
     if not project:
         raise HTTPException(status_code=404, detail="ไม่พบ project นี้")
 
+    # Intent classification ก่อนเข้า RAG pipeline
+    intent = classify_intent(data.question)
+
+    if intent == "greeting":
+        response = client.chat.completions.create(
+            model="typhoon-v2.5-30b-a3b-instruct",
+            messages=[{"role": "user", "content": f"ตอบกลับข้อความนี้แบบเป็นมิตร สั้น กระชับ: {data.question}"}],
+            temperature=0.5,
+            max_tokens=100,
+        )
+        return {
+            "answer": response.choices[0].message.content.strip(),
+            "sources": [],
+            "intent": "greeting",
+        }
+
+    # ต่อจากนี้คือ RAG pipeline เดิม (intent == "question")
     set_current_user(db, current_user.id)
 
     query_vector = embed_text(data.question)
@@ -174,12 +191,13 @@ def chat_with_project(
     top_chunks = [{"chunk_text": row[0], "score": row[1]} for row in result]
 
     if not top_chunks:
-        return {"answer": "ยังไม่มีข้อมูล requirement ใน project นี้ให้ค้นหาครับ", "sources": []}
+        return {"answer": "ยังไม่มีข้อมูล requirement ใน project นี้ให้ค้นหาครับ", "sources": [], "intent": "question"}
 
-    if top_chunks[0]["score"] < 0.5:
+    if top_chunks[0]["score"] < 0.4:
         return {
             "answer": "ข้อมูลที่มีอาจไม่เพียงพอต่อการตอบคำถามนี้อย่างมั่นใจ ลองถามให้เจาะจงมากขึ้น หรือเพิ่ม requirement ที่เกี่ยวข้อง",
             "sources": [{"chunk_text": c["chunk_text"], "relevance_score": round(c["score"], 3)} for c in top_chunks],
+            "intent": "question",
         }
 
     context = "\n\n".join(f"- {c['chunk_text']}" for c in top_chunks)
@@ -205,4 +223,5 @@ def chat_with_project(
     return {
         "answer": answer,
         "sources": [{"chunk_text": c["chunk_text"], "relevance_score": round(c["score"], 3)} for c in top_chunks],
+        "intent": "question",
     }
