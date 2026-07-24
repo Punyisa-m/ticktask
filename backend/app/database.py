@@ -14,3 +14,8 @@ def get_db():
         yield db
     finally:
         db.close()
+        
+from sqlalchemy import text
+
+def set_current_user(db, user_id: int):
+    db.execute(text(f"SET app.current_user_id = '{user_id}'"))

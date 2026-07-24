@@ -3,7 +3,7 @@ load_dotenv()
 
 from fastapi import FastAPI
 from app.database import engine, Base
-from app.models import user, project, requirement, task, skill
+from app.models import user, project, requirement, task, skill, chunk, project_member
 from app.routers import auth, project, requirement, task, skill
 
 Base.metadata.create_all(bind=engine)
