@@ -36,7 +36,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     token = credentials.credentials
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="ไม่สามารถยืนยันตัวตนได้",
+        detail="Unable to authenticate.",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -51,3 +51,11 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     if user is None:
         raise credentials_exception
     return user
+
+def require_department_head(current_user = Depends(get_current_user)):
+    if current_user.role not in ("department_head", "superadmin"):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the Department Head can perform this action."
+        )
+    return current_user

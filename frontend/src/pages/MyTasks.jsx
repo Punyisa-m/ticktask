@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
-import ChatWidget from "../components/ChatWidget";
-import TaskModal from "../components/TaskModal";
-import { getTasks, updateTask, getProject, getProjectMembers } from "../api/client";
+import { getAllTasks, getProjects, updateTask } from "../api/client";
 
 const columns = [
   { key: "todo", label: "Todo", bg: "bg-[#FFF1E7]" },
@@ -17,28 +14,24 @@ const priorityColor = {
   low: "bg-[#8FD98A] text-[#4A3F35]",
 };
 
-export default function Kanban() {
-  const { id } = useParams();
-  const [project, setProject] = useState(null);
+export default function MyTasks() {
   const [tasks, setTasks] = useState([]);
+  const [projectNameMap, setProjectNameMap] = useState({});
   const [draggedTask, setDraggedTask] = useState(null);
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [memberMap, setMemberMap] = useState({});
+  const myId = parseInt(localStorage.getItem("user_id"));
 
   useEffect(() => {
     loadData();
-  }, [id]);
+  }, []);
 
   async function loadData() {
-    const proj = await getProject(id);
-    setProject(proj);
-    const data = await getTasks(id);
-    setTasks(data || []);
+    const projects = await getProjects();
+    const nameMap = {};
+    projects.forEach((p) => (nameMap[p.id] = p.name));
+    setProjectNameMap(nameMap);
 
-    const members = await getProjectMembers(id);
-    const map = {};
-    (members || []).forEach((m) => (map[m.id] = m.name));
-    setMemberMap(map);
+    const allTasks = await getAllTasks();
+    setTasks(allTasks.filter((t) => t.assigned_to === myId));
   }
 
   async function handleDrop(newStatus) {
@@ -52,19 +45,7 @@ export default function Kanban() {
     <div className="min-h-screen">
       <Sidebar />
       <div className="lg:ml-[260px] px-6 lg:px-12 py-8 max-w-7xl mx-auto">
-        <div className="mb-2">
-          <p className="text-[#A08D7A] text-sm mb-1">Project: {project?.name}</p>
-          <h2 className="font-baloo text-3xl text-[#4A3F35]">Kanban Board 🎨</h2>
-        </div>
-
-        <nav className="flex border-b-2 border-[#A08D7A]/20 mb-8 gap-6">
-          <Link to={`/projects/${id}`} className="px-2 py-3 text-[#A08D7A] hover:text-[#FF6B5E] font-semibold">
-            Requirements
-          </Link>
-          <span className="px-2 py-3 border-b-4 border-[#FF6B5E] text-[#FF6B5E] font-semibold">
-            Tasks
-          </span>
-        </nav>
+        <h1 className="font-baloo text-3xl text-[#4A3F35] mb-8">My Tasks</h1>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {columns.map((col) => {
@@ -89,31 +70,30 @@ export default function Kanban() {
                       key={task.id}
                       draggable
                       onDragStart={() => setDraggedTask(task)}
-                      onClick={() => setSelectedTask(task)}
-                      className="bg-white cartoon-border rounded-xl p-4 cursor-pointer hover:-translate-y-1 hover:rotate-1 transition-all"
+                      className="bg-white cartoon-border rounded-xl p-4 cursor-grab active:cursor-grabbing hover:-translate-y-1 hover:rotate-1 transition-all"
                     >
+                      <span className="text-xs text-[#5EC8F2] font-semibold block mb-1">
+                        {projectNameMap[task.project_id] || "Project"}
+                      </span>
                       <div className="flex justify-between items-start mb-2">
                         <span className={`text-xs px-2 py-1 rounded-full font-semibold ${priorityColor[task.priority] || priorityColor.medium}`}>
                           {task.priority}
                         </span>
                       </div>
                       <h4 className="font-semibold text-[#4A3F35] text-sm mb-1">{task.title}</h4>
+                      {task.description && (
+                        <p className="text-xs text-[#A08D7A] mt-1 line-clamp-2">{task.description}</p>
+                      )}
                       {task.estimated_hours && (
                         <div className="flex items-center gap-1 text-[#A08D7A] text-xs mt-2">
                           <span className="material-symbols-outlined text-[14px]">schedule</span>
                           <span>{task.estimated_hours} Hr.</span>
                         </div>
                       )}
-                      {task.assigned_to && (
-                        <div className="flex items-center gap-1 text-[#A08D7A] text-xs mt-1">
-                          <span className="material-symbols-outlined text-[14px]">person</span>
-                          <span>{memberMap[task.assigned_to] || `User ${task.assigned_to}`}</span>
-                        </div>
-                      )}
                     </div>
                   ))}
                   {colTasks.length === 0 && (
-                    <p className="text-[#A08D7A]/50 text-sm text-center py-8">No tasks in this column yet</p>
+                    <p className="text-[#A08D7A]/50 text-sm text-center py-8">No tasks yet</p>
                   )}
                 </div>
               </div>
@@ -121,10 +101,6 @@ export default function Kanban() {
           })}
         </div>
       </div>
-      {selectedTask && (
-        <TaskModal task={selectedTask} onClose={() => setSelectedTask(null)} onUpdated={loadData} />
-      )}
-      <ChatWidget projectId={id} />
     </div>
   );
 }

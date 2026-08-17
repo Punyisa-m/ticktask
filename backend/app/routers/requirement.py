@@ -7,10 +7,13 @@ from app.models.project import Project
 from app.models.requirement import Requirement
 from app.models.task import Task
 from app.models.chunk import RequirementChunk
-from app.security import get_current_user
+from app.security import get_current_user, require_department_head
 from app import schemas
-from app.services.ai_service import analyze_requirement, client, classify_intent
+from app.services.ai_service import analyze_requirement, client, classify_intent, recommend_assignee
 from app.services.rag_service import chunk_text, embed_text
+from app.models.user import User
+from app.models.skill import UserSkill, Skill
+from app.models.project_member import ProjectMember
 
 router = APIRouter(prefix="/projects", tags=["requirements"])
 
@@ -26,14 +29,11 @@ def create_requirement(
     project_id: int,
     data: RequirementCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user = Depends(require_department_head),
 ):
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
-    ).first()
+    project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
-        raise HTTPException(status_code=404, detail="ไม่พบ project นี้")
+        raise HTTPException(status_code=404, detail="Project not found.")
 
     new_requirement = Requirement(
         project_id=project_id,
@@ -43,7 +43,7 @@ def create_requirement(
     db.commit()
     db.refresh(new_requirement)
 
-    # แบ่ง text เป็น chunk แล้วสร้าง embedding เก็บลง DB
+    # Split the text into chunks, generate embeddings, and store them in the database.
     text_chunks = chunk_text(data.raw_text)
     for chunk_str in text_chunks:
         vector = embed_text(chunk_str)
@@ -65,12 +65,9 @@ def list_requirements(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
 ):
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
-    ).first()
+    project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
-        raise HTTPException(status_code=404, detail="ไม่พบ project นี้")
+        raise HTTPException(status_code=404, detail="Project not found.")
 
     return db.query(Requirement).filter(Requirement.project_id == project_id).all()
 
@@ -80,24 +77,78 @@ def analyze(
     project_id: int,
     requirement_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user = Depends(require_department_head),
 ):
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
-    ).first()
+    project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
-        raise HTTPException(status_code=404, detail="ไม่พบ project นี้")
+        raise HTTPException(status_code=404, detail="Project not found.")
 
     requirement = db.query(Requirement).filter(
         Requirement.id == requirement_id,
         Requirement.project_id == project_id
     ).first()
     if not requirement:
-        raise HTTPException(status_code=404, detail="ไม่พบ requirement นี้")
+        raise HTTPException(status_code=404, detail="Requirement not found.")
 
     tasks = analyze_requirement(requirement.raw_text)
     return {"suggested_tasks": tasks}
+
+@router.post("/{project_id}/requirements/{requirement_id}/tasks/suggest-assignments")
+def suggest_assignments(
+    project_id: int,
+    requirement_id: int,
+    data: schemas.TaskConfirmRequest,  # Receive the list of tasks generated (or edited) by the AI.
+    db: Session = Depends(get_db),
+    current_user = Depends(require_department_head),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    # Fetch all members of this project (not the entire system).
+    members = (
+        db.query(User)
+        .join(ProjectMember, ProjectMember.user_id == User.id)
+        .filter(ProjectMember.project_id == project_id)
+        .all()
+    )
+
+    candidates = []
+    for member in members:
+        user_skills = (
+            db.query(Skill.name)
+            .join(UserSkill, UserSkill.skill_id == Skill.id)
+            .filter(UserSkill.user_id == member.id)
+            .all()
+        )
+        skill_names = [s.name for s in user_skills]
+        current_task_count = db.query(Task).filter(
+            Task.assigned_to == member.id,
+            Task.status != "done"
+        ).count()
+        candidates.append({
+            "user_id": member.id,
+            "name": member.name,
+            "skills": skill_names,
+            "current_task_count": current_task_count,
+        })
+
+    if not candidates:
+        raise HTTPException(status_code=400, detail="There are no members in this project to select.")
+
+    results = []
+    for task_item in data.tasks:
+        recommendation = recommend_assignee(task_item.title, task_item.description or "", candidates)
+        results.append({
+            "title": task_item.title,
+            "description": task_item.description,
+            "estimated_hours": task_item.estimated_hours,
+            "priority": task_item.priority,
+            "recommended_user_id": recommendation.get("user_id"),
+            "reason": recommendation.get("reason"),
+        })
+
+    return {"tasks_with_recommendations": results, "candidates": candidates}
 
 
 @router.post("/{project_id}/requirements/{requirement_id}/tasks/confirm", response_model=list[schemas.TaskResponse])
@@ -106,21 +157,18 @@ def confirm_tasks(
     requirement_id: int,
     data: schemas.TaskConfirmRequest,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user = Depends(require_department_head), 
 ):
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
-    ).first()
+    project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
-        raise HTTPException(status_code=404, detail="ไม่พบ project นี้")
+        raise HTTPException(status_code=404, detail="Project not found")
 
     requirement = db.query(Requirement).filter(
         Requirement.id == requirement_id,
         Requirement.project_id == project_id
     ).first()
     if not requirement:
-        raise HTTPException(status_code=404, detail="ไม่พบ requirement นี้")
+        raise HTTPException(status_code=404, detail="Requirement not found")
 
     created_tasks = []
     for task_item in data.tasks:
@@ -131,6 +179,7 @@ def confirm_tasks(
             description=task_item.description,
             estimated_hours=task_item.estimated_hours,
             priority=task_item.priority,
+            assigned_to=task_item.assigned_to,  
             status="todo",
         )
         db.add(new_task)
@@ -150,14 +199,11 @@ def chat_with_project(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
 ):
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
-    ).first()
+    project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
-        raise HTTPException(status_code=404, detail="ไม่พบ project นี้")
+        raise HTTPException(status_code=404, detail="Project not found")
 
-    # Intent classification ก่อนเข้า RAG pipeline
+    # Intent classification Before entering the RAG pipeline.
     intent = classify_intent(data.question)
 
     if intent == "greeting":
@@ -173,7 +219,6 @@ def chat_with_project(
             "intent": "greeting",
         }
 
-    # ต่อจากนี้คือ RAG pipeline เดิม (intent == "question")
     set_current_user(db, current_user.id)
 
     query_vector = embed_text(data.question)
@@ -191,11 +236,11 @@ def chat_with_project(
     top_chunks = [{"chunk_text": row[0], "score": row[1]} for row in result]
 
     if not top_chunks:
-        return {"answer": "ยังไม่มีข้อมูล requirement ใน project นี้ให้ค้นหาครับ", "sources": [], "intent": "question"}
+        return {"answer": "There is no requirement data available to search in this project.", "sources": [], "intent": "question"}
 
     if top_chunks[0]["score"] < 0.4:
         return {
-            "answer": "ข้อมูลที่มีอาจไม่เพียงพอต่อการตอบคำถามนี้อย่างมั่นใจ ลองถามให้เจาะจงมากขึ้น หรือเพิ่ม requirement ที่เกี่ยวข้อง",
+            "answer": "The available information may not be sufficient to answer this question with confidence. Try asking a more specific question or add relevant requirements.",
             "sources": [{"chunk_text": c["chunk_text"], "relevance_score": round(c["score"], 3)} for c in top_chunks],
             "intent": "question",
         }

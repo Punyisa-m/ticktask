@@ -4,11 +4,8 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.project import Project
 from app.models.task import Task
-from app.security import get_current_user
+from app.security import get_current_user, require_department_head
 from app import schemas
-from app.services.ai_service import recommend_assignee
-from app.models.user import User
-from app.models.skill import UserSkill, Skill
 
 router = APIRouter(prefix="/projects", tags=["tasks"])
 
@@ -26,12 +23,9 @@ def list_tasks(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
 ):
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
-    ).first()
+    project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
-        raise HTTPException(status_code=404, detail="ไม่พบ project นี้")
+        raise HTTPException(status_code=404, detail="Project not found")
 
     return db.query(Task).filter(Task.project_id == project_id).all()
 
@@ -43,14 +37,23 @@ def update_task(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
 ):
-    task = db.query(Task).join(Project).filter(
-        Task.id == task_id,
-        Project.owner_id == current_user.id
-    ).first()
+    task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
-        raise HTTPException(status_code=404, detail="ไม่พบ task นี้")
+        raise HTTPException(status_code=404, detail="Task not found")
 
     update_data = data.model_dump(exclude_unset=True)
+    is_head = current_user.role in ("department_head", "superadmin")
+
+    if not is_head:
+        if task.assigned_to != current_user.id:
+            raise HTTPException(status_code=403, detail="You are not the owner of this task and cannot edit it.")
+        not_allowed = set(update_data.keys()) - {"status"}
+        if not_allowed:
+            raise HTTPException(
+                status_code=403,
+                detail=f"You can only edit the task status. You cannot edit {', '.join(not_allowed)}."
+            )
+
     for field, value in update_data.items():
         setattr(task, field, value)
 
@@ -58,46 +61,15 @@ def update_task(
     db.refresh(task)
     return task
 
-@router.post("/tasks/{task_id}/assign")
-def assign_task(
+@router.delete("/tasks/{task_id}")
+def delete_task(
     task_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user = Depends(require_department_head),
 ):
-    task = db.query(Task).join(Project).filter(
-        Task.id == task_id,
-        Project.owner_id == current_user.id
-    ).first()
+    task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
-        raise HTTPException(status_code=404, detail="ไม่พบ task นี้")
-
-    # ดึงสมาชิกทีมทั้งหมด (ยกเว้น manager เอง ถ้าอยากรวมด้วยก็เอาเงื่อนไขนี้ออกได้)
-    members = db.query(User).filter(User.role == "member").all()
-
-    candidates = []
-    for member in members:
-        user_skills = (
-            db.query(Skill.name)
-            .join(UserSkill, UserSkill.skill_id == Skill.id)
-            .filter(UserSkill.user_id == member.id)
-            .all()
-        )
-        skill_names = [s.name for s in user_skills]
-
-        current_task_count = db.query(Task).filter(
-            Task.assigned_to == member.id,
-            Task.status != "done"
-        ).count()
-
-        candidates.append({
-            "user_id": member.id,
-            "name": member.name,
-            "skills": skill_names,
-            "current_task_count": current_task_count,
-        })
-
-    if not candidates:
-        raise HTTPException(status_code=400, detail="ไม่มีสมาชิกทีมให้เลือก")
-
-    result = recommend_assignee(task.title, task.description or "", candidates)
-    return {"recommendation": result, "candidates_considered": candidates}
+        raise HTTPException(status_code=404, detail="Task not found")
+    db.delete(task)
+    db.commit()
+    return {"message": "Task deleted successfully."}

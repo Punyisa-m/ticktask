@@ -1,12 +1,12 @@
 from sentence_transformers import SentenceTransformer
 
-# โหลด model ครั้งเดียวตอน server start (ไม่ใช่ทุกครั้งที่เรียกฟังก์ชัน)
+
 embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 
 
 def chunk_text(text: str, chunk_size: int = 200) -> list[str]:
     """
-    แบ่ง text ยาว ๆ ออกเป็นชิ้นเล็ก ๆ ตามประโยค/ย่อหน้า
+    Split long text into smaller chunks based on sentences and paragraphs.
     """
     paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
     chunks = []

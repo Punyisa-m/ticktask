@@ -15,7 +15,7 @@ export default function Login() {
       await login(email, password);
       navigate("/dashboard");
     } catch (err) {
-      setError("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+      setError("Invalid email or password.");
     }
   }
 
@@ -33,9 +33,9 @@ export default function Login() {
           {/* Header */}
           <div className="text-center mb-8">
             <h1 className="font-baloo text-[36px] md:text-[48px] leading-tight font-extrabold text-[#4A3F35]">
-              ยินดีต้อนรับกลับมา 👋
+              Welcome back
             </h1>
-            <p className="text-[#A08D7A] mt-2">มาสะสางงานที่ค้างไว้กันเถอะ!</p>
+            <p className="text-[#A08D7A] mt-2">Sign in to continue</p>
           </div>
 
           {/* Login Card */}
@@ -45,7 +45,7 @@ export default function Login() {
               <div className="space-y-2">
                 <label className="text-[#A08D7A] flex items-center gap-1 ml-2 text-sm font-semibold">
                   <span className="material-symbols-outlined text-[20px]">alternate_email</span>
-                  อีเมล
+                  Email
                 </label>
                 <input
                   type="email"
@@ -62,9 +62,9 @@ export default function Login() {
                 <div className="flex justify-between items-center px-2">
                   <label className="text-[#A08D7A] flex items-center gap-1 text-sm font-semibold">
                     <span className="material-symbols-outlined text-[20px]">lock</span>
-                    รหัสผ่าน
+                    Password
                   </label>
-                  <a className="text-sm text-[#5EC8F2] hover:underline" href="#">ลืมรหัส?</a>
+                  <a className="text-sm text-[#5EC8F2] hover:underline" href="#">Forget?</a>
                 </div>
                 <input
                   type="password"
@@ -86,7 +86,7 @@ export default function Login() {
                   type="submit"
                   className="w-full bg-[#FF6B5E] text-white py-4 rounded-full cartoon-border cartoon-shadow-primary font-bold flex items-center justify-center gap-2 transition-all active:scale-95 hover:scale-[1.02] hover:-translate-y-1"
                 >
-                  <span>เข้าสู่ระบบ</span>
+                  <span>Sign In</span>
                   <span className="material-symbols-outlined">rocket_launch</span>
                 </button>
               </div>
@@ -96,9 +96,9 @@ export default function Login() {
           {/* Footer */}
           <div className="mt-8 text-center">
             <p className="text-[#A08D7A]">
-              ยังไม่มีบัญชี?{" "}
+              Don't have an account?{" "}
               <Link to="/register" className="text-[#5EC8F2] font-bold hover:underline">
-                สมัครเลย
+                Sign up
               </Link>
             </p>
           </div>

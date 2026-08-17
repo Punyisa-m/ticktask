@@ -9,15 +9,23 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=schemas.UserResponse)
 def register(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
+    # Check if a Super Admin already exists.
+    existing_superadmin = db.query(User).filter(User.role == "superadmin").first()
+    if existing_superadmin:
+        raise HTTPException(
+            status_code=403,
+            detail="A Super Admin already exists in the system. Independent registration is no longer available. Please contact the Super Admin or your department head."
+        )
+
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
-        raise HTTPException(status_code=400, detail="Email นี้ถูกใช้ไปแล้ว")
+        raise HTTPException(status_code=400, detail="This email is already in use.")
 
     new_user = User(
         name=user_data.name,
         email=user_data.email,
         password_hash=security.hash_password(user_data.password),
-        role=user_data.role,
+        role="superadmin",  # The first person to register will always be assigned as the Super Admin.
     )
     db.add(new_user)
     db.commit()
@@ -28,7 +36,7 @@ def register(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
 def login(login_data: schemas.UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == login_data.email).first()
     if not user or not security.verify_password(login_data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Email หรือ password ไม่ถูกต้อง")
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     token = security.create_access_token(data={"sub": str(user.id)})
     return {"access_token": token, "token_type": "bearer"}

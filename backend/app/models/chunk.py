@@ -9,4 +9,4 @@ class RequirementChunk(Base):
     requirement_id = Column(Integer, ForeignKey("requirements.id"), nullable=False)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     chunk_text = Column(Text, nullable=False)
-    embedding = Column(Vector(384))  # 384 = ขนาด vector ของ model ที่ใช้ (multilingual-MiniLM-L12-v2)
+    embedding = Column(Vector(384)) 

@@ -4,7 +4,7 @@ class UserCreate(BaseModel):
     name: str
     email: EmailStr
     password: str
-    role: str  # "manager" หรือ "member"
+    role: str 
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -15,6 +15,7 @@ class UserResponse(BaseModel):
     name: str
     email: str
     role: str
+    department_id: int | None = None
 
     class Config:
         from_attributes = True
@@ -52,6 +53,7 @@ class TaskItem(BaseModel):
     description: str | None = None
     estimated_hours: float | None = None
     priority: str = "medium"
+    assigned_to: int | None = None
 
 class TaskConfirmRequest(BaseModel):
     tasks: list[TaskItem]
