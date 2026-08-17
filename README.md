@@ -2,7 +2,7 @@
 
 AI-powered project management platform that transforms raw requirements into actionable, assigned tasks — with a RAG-powered chat assistant for querying project knowledge.
 
-![CI](https://github.com/Punyisa-m/ticktask/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/Punyisa-m/ticktask/actions/workflows/ci.yml/badge.svg)](https://github.com/Punyisa-m/ticktask/actions/workflows/ci.yml)
 
 ## What is this?
 
